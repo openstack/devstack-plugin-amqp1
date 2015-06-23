@@ -150,8 +150,8 @@ function _install_qpid_backend {
     _install_pyngus
 
     if is_fedora; then
-        install_package cyrus_sasl_lib
-        install_package cyrus_sasl_plain
+        install_package cyrus-sasl-lib
+        install_package cyrus-sasl-plain
         install_package qpid-cpp-server
     elif is_ubuntu; then
         install_package sasl2-bin
@@ -205,7 +205,7 @@ function _iniset_qpid_backend {
 if is_service_enabled amqp1; then
     # @TODO(kgiusti) hardcode qpid for now, add other service
     # types as support is provided
-    if [ "$AMQP1_SERVICE" != "qpid" ];
+    if [ "$AMQP1_SERVICE" != "qpid" ]; then
         die $LINENO "AMQP 1.0 requires qpid - $AMQP1_SERVICE not supported"
     fi
 
@@ -263,8 +263,3 @@ $XTRACE
 ## Local variables:
 ## mode: shell-script
 ## End:
-
-
-
-
-
