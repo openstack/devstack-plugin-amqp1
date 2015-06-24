@@ -53,6 +53,7 @@ function _install_pyngus {
 function _remove_pyngus {
     # TODO(kgiusti) no way to pip uninstall?
     # pip_install_gr pyngus
+    :
 }
 
 
