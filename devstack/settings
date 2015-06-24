@@ -1,6 +1,6 @@
 enable_service amqp1
 disable_service rabbit
 AMQP1_SERVICE=${AMQP1_SERVICE:-qpid}
-AMQP1_HOST=${AMQP1_HOST:-`hostname`}
+AMQP1_HOST=${AMQP1_HOST:-$SERVICE_HOST}
 
 
