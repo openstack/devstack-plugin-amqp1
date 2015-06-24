@@ -44,30 +44,13 @@ function _get_amqp1_transport_url {
 # install packages necessary for support of the oslo.messaging AMQP
 # 1.0 driver
 function _install_pyngus {
-    # TODO(kgiusti) remove this once pyngus is upgraded to support
-    # auto-loading the proton bits:
-    if is_fedora; then
-        install_package qpid-proton-c-devel
-        install_package python-qpid-proton
-    else
-        exit_distro_not_supported "QPID AMQP 1.0 Proton libraries"
-    fi
-
     # Install pyngus client API
-    # TODO(kgiusti) enforce minimal version of pyngus
     pip_install_gr pyngus
 }
 
 
 # remove packages used by oslo.messaging AMQP 1.0 driver
 function _remove_pyngus {
-    # TODO(kgiusti) remove this once pyngus is upgraded to support
-    # auto-loading the proton bits:
-    if is_fedora; then
-        uninstall_package qpid-proton-c-devel
-        uninstall_package python-qpid-proton
-    fi
-    # TODO(kgiusti) ubuntu cleanup
     # TODO(kgiusti) no way to pip uninstall?
     # pip_install_gr pyngus
 }
@@ -173,6 +156,9 @@ function _start_qpid_backend {
 function _cleanup_qpid_backend {
     if is_fedora; then
         uninstall_package qpid-cpp-server
+	# TODO(kgiusti) can we pull these, or will that break other
+	# packages that depend on them?
+	
         # install_package cyrus_sasl_lib
         # install_package cyrus_sasl_plain
     elif is_ubuntu; then
