@@ -130,19 +130,23 @@ EOF
 
 # install and configure the qpidd broker
 function _install_qpid_backend {
-    _install_pyngus
 
     if is_fedora; then
+        # expects epel is already added to the yum repos
         install_package cyrus-sasl-lib
         install_package cyrus-sasl-plain
         install_package qpid-cpp-server
     elif is_ubuntu; then
         install_package sasl2-bin
+        # newer qpidd and proton only available via the qpid PPA
+        sudo add-apt-repository ppa:qpid/testing
+        sudo apt-get update
         install_package qpidd
     else
         exit_distro_not_supported "qpidd installation"
     fi
 
+    _install_pyngus
     _configure_qpid
 }
 
