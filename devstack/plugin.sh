@@ -51,6 +51,9 @@ function _install_pyngus {
         # put them in the wrong path:
         # https://github.com/pypa/pip/issues/2940
         install_package python-qpid-proton
+    elif is_ubuntu; then
+        # ditto
+        install_package python-qpid-proton
     fi
     pip_install_gr pyngus
 }
@@ -147,8 +150,10 @@ function _install_qpid_backend {
     elif is_ubuntu; then
         install_package sasl2-bin
         # newer qpidd and proton only available via the qpid PPA
-        sudo add-apt-repository ppa:qpid/testing
-        sudo apt-get update
+        sudo add-apt-repository -y ppa:qpid/testing
+        #sudo apt-get update
+        REPOS_UPDATED=False
+        update_package_repo
         install_package qpidd
     else
         exit_distro_not_supported "qpidd installation"
