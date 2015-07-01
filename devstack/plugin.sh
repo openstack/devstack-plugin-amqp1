@@ -45,6 +45,13 @@ function _get_amqp1_transport_url {
 # 1.0 driver
 function _install_pyngus {
     # Install pyngus client API
+    if is_fedora; then
+        # TODO(kgiusti) due to a bug in the way pip installs wheels,
+        # do not let pip install the proton python bindings as it will
+        # put them in the wrong path:
+        # https://github.com/pypa/pip/issues/2940
+        install_package python-qpid-proton
+    fi
     pip_install_gr pyngus
 }
 
