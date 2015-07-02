@@ -80,6 +80,9 @@ function _configure_qpid {
         exit_distro_not_supported "qpidd.conf file not found!"
     fi
 
+    # ensure that the qpidd service can read its config
+    sudo chmod o+r $qpid_conf_file
+
     # force the ACL file to a known location
     local qpid_acl_file=/etc/qpid/qpidd.acl
     if [ ! -e $qpid_acl_file ]; then
@@ -136,9 +139,6 @@ queue-patterns=unicast
 topic-patterns=broadcast
 EOF
     fi
-
-    # ensure that the qpidd service can read its config
-    sudo chmod o+r $qpid_conf_file
 }
 
 
