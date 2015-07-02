@@ -91,7 +91,7 @@ function _configure_qpid {
     echo "acl-file=$qpid_acl_file" | sudo tee --append $qpid_conf_file
 
     sudo sed -i '/^auth=/d' $qpid_conf_file
-    if [ -z "$QPID_USERNAME" ]; then
+    if [ -z "$AMQP1_USERNAME" ]; then
         # no QPID user configured, so disable authentication
         # and access control
         echo "auth=no" | sudo tee --append $qpid_conf_file
@@ -100,14 +100,14 @@ acl allow all all
 EOF
     else
         # Configure qpidd to use PLAIN authentication, and add
-        # QPID_USERNAME to the ACL:
+        # AMQP1_USERNAME to the ACL:
         echo "auth=yes" | sudo tee --append $qpid_conf_file
-        if [ -z "$QPID_PASSWORD" ]; then
-            read_password QPID_PASSWORD "ENTER A PASSWORD FOR QPID USER $QPID_USERNAME"
+        if [ -z "$AMQP1_PASSWORD" ]; then
+            read_password AMQP1_PASSWORD "ENTER A PASSWORD FOR QPID USER $AMQP1_USERNAME"
         fi
-        # Create ACL to allow $QPID_USERNAME full access
+        # Create ACL to allow $AMQP1_USERNAME full access
         cat <<EOF | sudo tee $qpid_acl_file
-group admin ${QPID_USERNAME}@QPID
+group admin ${AMQP1_USERNAME}@QPID
 acl allow admin all
 acl deny all all
 EOF
@@ -118,7 +118,7 @@ EOF
         if [ ! -e $sasl_db ]; then
             sudo mkdir -p -m 755 `dirname $sasl_db`
         fi
-        echo $QPID_PASSWORD | sudo saslpasswd2 -c -p -f $sasl_db -u QPID $QPID_USERNAME
+        echo $AMQP1_PASSWORD | sudo saslpasswd2 -c -p -f $sasl_db -u QPID $AMQP1_USERNAME
         sudo chmod o+r $sasl_db
     fi
 
