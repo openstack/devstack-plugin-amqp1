@@ -137,6 +137,7 @@ EOF
 queue-patterns=exclusive
 queue-patterns=unicast
 topic-patterns=broadcast
+log-to-file=$LOGDIR/qpidd.log 
 EOF
     fi
 }
@@ -169,7 +170,8 @@ function _install_qpid_backend {
 
 function _start_qpid_backend {
     echo_summary "Starting qpidd broker"
-    start_service qpidd
+    # restart, since qpidd may already be running
+    restart_service qpidd
 }
 
 
@@ -178,7 +180,7 @@ function _cleanup_qpid_backend {
         uninstall_package qpid-cpp-server
 	# TODO(kgiusti) can we pull these, or will that break other
 	# packages that depend on them?
-	
+
         # install_package cyrus_sasl_lib
         # install_package cyrus_sasl_plain
     elif is_ubuntu; then
