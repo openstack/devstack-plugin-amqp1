@@ -136,6 +136,9 @@ queue-patterns=unicast
 topic-patterns=broadcast
 EOF
     fi
+
+    # ensure that the qpidd service can read its config
+    sudo chmod o+r $qpid_conf_file
 }
 
 
