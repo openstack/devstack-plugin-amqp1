@@ -204,8 +204,8 @@ function _iniset_qpid_backend {
     # @TODO(kgiusti) why is "qpid_" part of the setting's name?  Why isn't this generic??
     iniset $file $section qpid_hostname ${AMQP1_HOST}
     if [ -n "$AMQP1_USERNAME" ]; then
-	iniset $file $section qpid_username $AMQP1_USERNAME
-	iniset $file $section qpid_password $AMQP1_PASSWORD
+        iniset $file $section qpid_username $AMQP1_USERNAME
+        iniset $file $section qpid_password $AMQP1_PASSWORD
     fi
 }
 
