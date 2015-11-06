@@ -31,10 +31,6 @@
 # AMQP1_{USERNAME,PASSWORD} - for authentication with AMQP1_HOST
 #
 
-# Save trace setting
-XTRACE=$(set +o | grep xtrace)
-set +o xtrace
-
 # builds transport url string
 function _get_amqp1_transport_url {
     echo "amqp://$AMQP1_USERNAME:$AMQP1_PASSWORD@$AMQP1_HOST:5672/"
@@ -132,14 +128,19 @@ EOF
     if ! $QPIDD --help | grep -q "queue-patterns"; then
         exit_distro_not_supported "qpidd with AMQP 1.0 support"
     fi
+    local log_file=$LOGDIR/qpidd.log
     if ! grep -q "queue-patterns=exclusive" $qpid_conf_file; then
         cat <<EOF | sudo tee --append $qpid_conf_file
 queue-patterns=exclusive
 queue-patterns=unicast
 topic-patterns=broadcast
-log-to-file=$LOGDIR/qpidd.log 
+log-enable=info+
+log-to-file=$log_file
+log-to-syslog=yes
 EOF
     fi
+    sudo touch $log_file
+    sudo chmod a+rw $log_file  # qpidd user can write to it
 }
 
 
@@ -261,10 +262,6 @@ if is_service_enabled amqp1; then
         _uninstall_${AMQP1_SERVICE}_backend
     fi
 fi
-
-
-# Restore xtrace
-$XTRACE
 
 
 # Tell emacs to use shell-script-mode
