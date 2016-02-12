@@ -113,7 +113,8 @@ EOF
         # Add user to SASL database
         local sasl_conf_file=/etc/sasl2/qpidd.conf
         sudo sed -i.bak '/PLAIN/!s/mech_list: /mech_list: PLAIN /' $sasl_conf_file
-        local sasl_db=`sudo grep sasldb_path $sasl_conf_file | cut -f 2 -d ":" | tr -d [:blank:]`
+        local sasl_db
+        sasl_db=`sudo grep sasldb_path $sasl_conf_file | cut -f 2 -d ":" | tr -d [:blank:]`
         if [ ! -e $sasl_db ]; then
             sudo mkdir -p -m 755 `dirname $sasl_db`
         fi
@@ -139,6 +140,14 @@ log-to-file=$log_file
 log-to-syslog=yes
 EOF
     fi
+
+    # Set the SASL service name if the version of qpidd supports it
+    if $QPIDD --help | grep -q "sasl-service-name"; then
+        cat <<EOF | sudo tee --append $qpid_conf_file
+sasl-service-name=amqp
+EOF
+    fi
+
     sudo touch $log_file
     sudo chmod a+rw $log_file  # qpidd user can write to it
 }
@@ -191,7 +200,7 @@ function _cleanup_qpid_backend {
         exit_distro_not_supported "qpid installation"
     fi
 
-    _uninstall_pyngus
+    _remove_pyngus
 }
 
 
@@ -202,11 +211,10 @@ function _iniset_qpid_backend {
     local section=${3:-DEFAULT}
 
     iniset $file $section rpc_backend "amqp"
-    # @TODO(kgiusti) why is "qpid_" part of the setting's name?  Why isn't this generic??
     iniset $file $section qpid_hostname ${AMQP1_HOST}
     if [ -n "$AMQP1_USERNAME" ]; then
-        iniset $file $section qpid_username $AMQP1_USERNAME
-        iniset $file $section qpid_password $AMQP1_PASSWORD
+        iniset $file oslo_messaging_amqp username $AMQP1_USERNAME
+        iniset $file oslo_messaging_amqp password $AMQP1_PASSWORD
     fi
 }
 
@@ -259,7 +267,7 @@ if is_service_enabled amqp1; then
     if [[ "$1" == "clean" ]]; then
         # Remove state and transient data
         # Remember clean.sh first calls unstack.sh
-        _uninstall_${AMQP1_SERVICE}_backend
+        _cleanup_${AMQP1_SERVICE}_backend
     fi
 fi
 
