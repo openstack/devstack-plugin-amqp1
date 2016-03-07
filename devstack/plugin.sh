@@ -153,6 +153,117 @@ EOF
 }
 
 
+# Set up the various configuration files used by the qpid-dispatch-router (qdr)
+function _configure_qdr {
+
+    # the location of the configuration is /etc/qpid-dispatch
+    local qdr_conf_file
+    if [ -e /etc/qpid-dispatch/qdrouterd.conf ]; then
+        qdr_conf_file=/etc/qpid-dispatch/qdrouterd.conf
+    else
+        exit_distro_not_supported "qdrouterd.conf file not found!"
+    fi
+
+    # ensure that the qpid-dispatch-router service can read its config
+    sudo chmod o+r $qdr_conf_file
+
+    # qdouterd.conf file customization for devstack deployment
+    # Define attributes related to the AMQP container
+    cat <<EOF | sudo tee $qdr_conf_file
+container {
+    workerThreads: 4
+    containerName: Qpid.Dispatch.Router.A
+    saslConfigPath: /etc/sasl2
+    saslConfigName: qdrouterd
+    debugDump: /opt/stack/amqp1
+}
+
+EOF
+
+    # Create stand alone router
+    cat <<EOF | sudo tee --append $qdr_conf_file
+router {
+    mode: standalone
+    routerId: Router.A
+}
+
+EOF
+
+    # Create a listener for incoming connect to the router
+    cat <<EOF | sudo tee --append $qdr_conf_file
+listener {
+    addr: 0.0.0.0
+    port: amqp
+    role: normal
+EOF
+    if [ -z "$AMQP1_USERNAME" ]; then
+	#no user configured, so disable authentication
+        cat <<EOF | sudo tee --append $qdr_conf_file
+    authenticatePeer: no
+}
+
+EOF
+    else
+        # configure to use PLAIN authentication
+        if [ -z "$AMQP1_PASSWORD" ]; then
+            read_password AMQP1_PASSWORD "ENTER A PASSWORD FOR QPID DISPATCH USER $AMQP1_USERNAME"
+        fi
+        cat <<EOF | sudo tee --append $qdr_conf_file
+        authenticatePeer: yes
+}
+
+EOF
+        # Add user to SASL database
+        local sasl_conf_file=/etc/sasl2/qdrouterd.conf
+        sudo sed -i.bak '/PLAIN/!s/mech_list: /mech_list: PLAIN /' $sasl_conf_file
+        local sasl_db
+        sasl_db=`sudo grep sasldb_path $sasl_conf_file | cut -f 2 -d ":" | tr -d [:blank:]`
+        if [ ! -e $sasl_db ]; then
+            sudo mkdir -p -m 755 `dirname $sasl_db`
+        fi
+        echo $AMQP1_PASSWORD | sudo saslpasswd2 -c -p -f $sasl_db $AMQP1_USERNAME
+        sudo chmod o+r $sasl_db
+    fi
+
+    # Create fixed address prefixes
+    cat <<EOF | sudo tee --append $qdr_conf_file
+fixedAddress {
+    prefix: /unicast
+    fanout: single
+    bias: closest
+}
+
+fixedAddress {
+    prefix: /exclusive
+    fanout: single
+    bias: closest
+}
+
+fixedAddress {
+    prefix: /broadcast
+    fanout: multiple
+}
+
+EOF
+
+    local log_file=$LOGDIR/qdrouterd.log
+
+    sudo touch $log_file
+    sudo chmod a+rw $log_file  # qdrouterd user can write to it
+
+    # Create log file configuration
+    cat <<EOF | sudo tee --append $qdr_conf_file
+log {
+    module: DEFAULT
+    enable: info+
+    output: $log_file
+}
+
+EOF
+
+}
+
+
 # install and configure the qpidd broker
 function _install_qpid_backend {
 
@@ -178,10 +289,43 @@ function _install_qpid_backend {
 }
 
 
+# install and configure the qpid-dispatch-router
+function _install_qdr_backend {
+
+    if is_fedora; then
+        # expects epel is already added to the yum repos
+        install_package cyrus-sasl-lib
+        install_package cyrus-sasl-plain
+        install_package qpid-dispatch-router
+    elif is_ubuntu; then
+        install_package sasl2-bin
+        # dispatch available via qpid PPA
+        sudo add-apt-repository -y ppa:qpid/testing
+        #sudo apt-get update
+        REPOS_UPDATED=False
+        update_package_repo
+        install_package qdrouterd
+    else
+        exit_distro_not_supported "qdrouterd installation"
+    fi
+
+    _install_pyngus
+    _configure_qdr
+
+}
+
+
 function _start_qpid_backend {
     echo_summary "Starting qpidd broker"
     # restart, since qpidd may already be running
     restart_service qpidd
+}
+
+
+function _start_qdr_backend {
+    echo_summary "Starting qdrouterd router"
+    # restart, since qdrouterd may already be running
+    restart_service qdrouterd
 }
 
 
@@ -204,8 +348,27 @@ function _cleanup_qpid_backend {
 }
 
 
-# iniset configuration for qpid
-function _iniset_qpid_backend {
+function _cleanup_qdr_backend {
+    if is_fedora; then
+        uninstall_package qpid-dispatch-router
+	# TODO(kgiusti) can we pull these, or will that break other
+	# packages that depend on them?
+
+        # install_package cyrus_sasl_lib
+        # install_package cyrus_sasl_plain
+    elif is_ubuntu; then
+        uninstall_package qdrouterd
+        # install_package sasl2-bin
+    else
+        exit_distro_not_supported "qdrouterd installation"
+    fi
+
+    _remove_pyngus
+}
+
+
+# iniset configuration for amqp rpc_backend
+function _iniset_amqp1_backend {
     local package=$1
     local file=$2
     local section=${3:-DEFAULT}
@@ -220,17 +383,16 @@ function _iniset_qpid_backend {
 
 
 if is_service_enabled amqp1; then
-    # @TODO(kgiusti) hardcode qpid for now, add other service
-    # types as support is provided
-    if [ "$AMQP1_SERVICE" != "qpid" ]; then
-        die $LINENO "AMQP 1.0 requires qpid - $AMQP1_SERVICE not supported"
+    # @TODO (ansmith) check is for qdr or qpid for now
+    if [[ "$AMQP1_SERVICE" != "qdr" && "$AMQP1_SERVICE" != "qpid" ]]; then
+        die $LINENO "AMQP 1.0 requires qpid or qdr - $AMQP1_SERVICE not supported"
     fi
 
     # Note: this is the only tricky part about out of tree rpc plugins,
     # you must overwrite the iniset_rpc_backend function so that when
     # that's passed around the correct settings files are made.
     function iniset_rpc_backend {
-        _iniset_${AMQP1_SERVICE}_backend $@
+        _iniset_amqp1_backend $@
     }
     function get_transport_url {
         _get_amqp1_transport_url $@

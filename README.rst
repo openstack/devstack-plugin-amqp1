@@ -2,7 +2,7 @@
  Enabling in Devstack
 ======================
 
-Devstack plugin for AMQP 1.0 olso.messaging driver
+Devstack plugin for AMQP 1.0 olso.messaging driver - This plugin supports the QPID C++ broker and QPID Dispatch Router messaging systems for the rpc backend. Additional information on these messaging systems can be found at the Apache QPID homepage (https://qpid.apache.org).
 
 1. Download DevStack
 
@@ -17,6 +17,10 @@ Devstack plugin for AMQP 1.0 olso.messaging driver
      AMQP1_USERNAME=queueuser
      AMQP1_PASSWORD=queuepassword     
 
-4. run ``stack.sh``
+4. Optionally set the service variable for the configuration if the QPID Dispatch Router is to be used as an alternative AMQP1 service::
+
+     AMQP1_SERVICE=qdr
+   
+5. run ``stack.sh``
 
     
