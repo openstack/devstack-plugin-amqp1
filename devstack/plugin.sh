@@ -169,22 +169,15 @@ function _configure_qdr {
 
     # qdouterd.conf file customization for devstack deployment
     # Define attributes related to the AMQP container
+    # Create stand alone router
     cat <<EOF | sudo tee $qdr_conf_file
-container {
+router {
+    mode: standalone
+    id: Router.A
     workerThreads: 4
-    containerName: Qpid.Dispatch.Router.A
     saslConfigPath: /etc/sasl2
     saslConfigName: qdrouterd
     debugDump: /opt/stack/amqp1
-}
-
-EOF
-
-    # Create stand alone router
-    cat <<EOF | sudo tee --append $qdr_conf_file
-router {
-    mode: standalone
-    routerId: Router.A
 }
 
 EOF
@@ -227,21 +220,49 @@ EOF
 
     # Create fixed address prefixes
     cat <<EOF | sudo tee --append $qdr_conf_file
-fixedAddress {
-    prefix: /unicast
-    fanout: single
-    bias: closest
+address {
+    prefix: unicast
+    distribution: closest
 }
 
-fixedAddress {
-    prefix: /exclusive
-    fanout: single
-    bias: closest
+address {
+    prefix: exclusive
+    distribution: closest
 }
 
-fixedAddress {
-    prefix: /broadcast
-    fanout: multiple
+address {
+    prefix: broadcast
+    distribution: multicast
+}
+
+address {
+    prefix: openstack.org/om/rpc/multicast
+    distribution: multicast
+}
+
+address {
+    prefix: openstack.org/om/rpc/unicast
+    distribution: closest
+}
+
+address {
+    prefix: openstack.org/om/rpc/anycast
+    distribution: balanced
+}
+
+address {
+    prefix: openstack.org/om/notify/multicast
+    distribution: multicast
+}
+
+address {
+    prefix: openstack.org/om/notify/unicast
+    distribution: closest
+}
+
+address {
+    prefix: openstack.org/om/notify/anycast
+    distribution: balanced
 }
 
 EOF
