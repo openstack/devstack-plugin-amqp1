@@ -112,7 +112,13 @@ acl deny all all
 EOF
         # Add user to SASL database
         local sasl_conf_file=/etc/sasl2/qpidd.conf
-        sudo sed -i.bak '/PLAIN/!s/mech_list: /mech_list: PLAIN /' $sasl_conf_file
+        cat <<EOF | sudo tee $sasl_conf_file
+pwcheck_method: auxprop
+auxprop_plugin: sasldb
+sasldb_path: /var/lib/qpidd/qpidd.sasldb
+mech_list: PLAIN
+sql_select: dummy select
+EOF
         local sasl_db
         sasl_db=`sudo grep sasldb_path $sasl_conf_file | cut -f 2 -d ":" | tr -d [:blank:]`
         if [ ! -e $sasl_db ]; then
@@ -202,13 +208,19 @@ EOF
             read_password AMQP1_PASSWORD "ENTER A PASSWORD FOR QPID DISPATCH USER $AMQP1_USERNAME"
         fi
         cat <<EOF | sudo tee --append $qdr_conf_file
-        authenticatePeer: yes
+    authenticatePeer: yes
 }
 
 EOF
         # Add user to SASL database
         local sasl_conf_file=/etc/sasl2/qdrouterd.conf
-        sudo sed -i.bak '/PLAIN/!s/mech_list: /mech_list: PLAIN /' $sasl_conf_file
+        cat <<EOF | sudo tee $sasl_conf_file
+pwcheck_method: auxprop
+auxprop_plugin: sasldb
+sasldb_path: /var/lib/qdrouterd/qdrouterd.sasldb
+mech_list: PLAIN
+sql_select: dummy select
+EOF
         local sasl_db
         sasl_db=`sudo grep sasldb_path $sasl_conf_file | cut -f 2 -d ":" | tr -d [:blank:]`
         if [ ! -e $sasl_db ]; then
