@@ -24,7 +24,7 @@
 # Environment Configuration
 #
 # AMQP1_SERVICE - identifies the messaging backend to use.  Should be
-#    one of 'qpid', ...
+#    one of 'qpid' for broker backend or 'qpid-dual' for hybrid router-broker.
 #    @TODO(kgiusti) add qpid-dispatch, rabbitmq, etc
 # AMQP1_HOST - the host:port used to connect to the messaging service.
 #    Defaults to 127.0.0.1:5672
@@ -33,9 +33,9 @@
 
 # builds transport url string
 function _get_amqp1_transport_url {
-    echo "amqp://$AMQP1_USERNAME:$AMQP1_PASSWORD@$AMQP1_HOST:5672/"
+    local port=$1
+    echo "amqp://$AMQP1_USERNAME:$AMQP1_PASSWORD@$AMQP1_HOST:$port/"
 }
-
 
 # install packages necessary for support of the oslo.messaging AMQP
 # 1.0 driver
@@ -86,10 +86,8 @@ function _configure_qpid {
         sudo touch $qpid_acl_file
         sudo chmod o+r $qpid_acl_file
     fi
-    sudo sed -i.bak '/^acl-file=/d' $qpid_conf_file
-    echo "acl-file=$qpid_acl_file" | sudo tee --append $qpid_conf_file
+    echo "acl-file=$qpid_acl_file" | sudo tee $qpid_conf_file
 
-    sudo sed -i '/^auth=/d' $qpid_conf_file
     if [ -z "$AMQP1_USERNAME" ]; then
         # no QPID user configured, so disable authentication
         # and access control
@@ -136,8 +134,7 @@ EOF
         exit_distro_not_supported "qpidd with AMQP 1.0 support"
     fi
     local log_file=$LOGDIR/qpidd.log
-    if ! grep -q "queue-patterns=exclusive" $qpid_conf_file; then
-        cat <<EOF | sudo tee --append $qpid_conf_file
+    cat <<EOF | sudo tee --append $qpid_conf_file
 queue-patterns=exclusive
 queue-patterns=unicast
 topic-patterns=broadcast
@@ -145,7 +142,6 @@ log-enable=info+
 log-to-file=$log_file
 log-to-syslog=yes
 EOF
-    fi
 
     # Set the SASL service name if the version of qpidd supports it
     if $QPIDD --help | grep -q "sasl-service-name"; then
@@ -189,10 +185,11 @@ router {
 EOF
 
     # Create a listener for incoming connect to the router
+    # assign router to amqps port
     cat <<EOF | sudo tee --append $qdr_conf_file
 listener {
     addr: 0.0.0.0
-    port: amqp
+    port: amqps
     role: normal
 EOF
     if [ -z "$AMQP1_USERNAME" ]; then
@@ -297,14 +294,18 @@ EOF
 }
 
 
-# install and configure the qpidd broker
-function _install_qpid_backend {
+# install and configure the amqp1 backends
+# (qpidd broker and optionally dispatch-router for hybrid)
+function _install_amqp1_backend {
 
     if is_fedora; then
         # expects epel is already added to the yum repos
         install_package cyrus-sasl-lib
         install_package cyrus-sasl-plain
         install_package qpid-cpp-server
+        if [ "$AMQP1_SERVICE" == "qpid-dual" ]; then
+            install_package qpid-dispatch-router
+        fi
     elif is_ubuntu; then
         install_package sasl2-bin
         # newer qpidd and proton only available via the qpid PPA
@@ -313,58 +314,37 @@ function _install_qpid_backend {
         REPOS_UPDATED=False
         update_package_repo
         install_package qpidd
+        if [ "$AMQP1_SERVICE" == "qpid-dual" ]; then
+            install_package qdrouterd
+        fi
     else
-        exit_distro_not_supported "qpidd installation"
+        exit_distro_not_supported "amqp1 qpid installation"
     fi
 
     _install_pyngus
     _configure_qpid
-}
-
-
-# install and configure the qpid-dispatch-router
-function _install_qdr_backend {
-
-    if is_fedora; then
-        # expects epel is already added to the yum repos
-        install_package cyrus-sasl-lib
-        install_package cyrus-sasl-plain
-        install_package qpid-dispatch-router
-    elif is_ubuntu; then
-        install_package sasl2-bin
-        # dispatch available via qpid PPA
-        sudo add-apt-repository -y ppa:qpid/testing
-        #sudo apt-get update
-        REPOS_UPDATED=False
-        update_package_repo
-        install_package qdrouterd
-    else
-        exit_distro_not_supported "qdrouterd installation"
+    if [ "$AMQP1_SERVICE" == "qpid-dual" ]; then
+        _configure_qdr
     fi
-
-    _install_pyngus
-    _configure_qdr
-
 }
 
 
-function _start_qpid_backend {
-    echo_summary "Starting qpidd broker"
-    # restart, since qpidd may already be running
+function _start_amqp1_backend {
+    echo_summary "Starting amqp1 backends"
+    # restart, since qpid* may already be running
     restart_service qpidd
+    if [ "$AMQP1_SERVICE" == "qpid-dual" ]; then
+        restart_service qdrouterd
+    fi
 }
 
 
-function _start_qdr_backend {
-    echo_summary "Starting qdrouterd router"
-    # restart, since qdrouterd may already be running
-    restart_service qdrouterd
-}
-
-
-function _cleanup_qpid_backend {
+function _cleanup_amqp1_backend {
     if is_fedora; then
         uninstall_package qpid-cpp-server
+        if [ "$AMQP1_SERVICE" == "qpid-dual" ]; then
+            uninstall_package qpid-dispatch-router
+        fi
 	# TODO(kgiusti) can we pull these, or will that break other
 	# packages that depend on them?
 
@@ -372,28 +352,12 @@ function _cleanup_qpid_backend {
         # install_package cyrus_sasl_plain
     elif is_ubuntu; then
         uninstall_package qpidd
+        if [ "$AMQP1_SERVICE" == "qpid-dual" ]; then
+            uninstall_package qdrouterd
+        fi
         # install_package sasl2-bin
     else
-        exit_distro_not_supported "qpid installation"
-    fi
-
-    _remove_pyngus
-}
-
-
-function _cleanup_qdr_backend {
-    if is_fedora; then
-        uninstall_package qpid-dispatch-router
-	# TODO(kgiusti) can we pull these, or will that break other
-	# packages that depend on them?
-
-        # install_package cyrus_sasl_lib
-        # install_package cyrus_sasl_plain
-    elif is_ubuntu; then
-        uninstall_package qdrouterd
-        # install_package sasl2-bin
-    else
-        exit_distro_not_supported "qdrouterd installation"
+        exit_distro_not_supported "amqp1 qpid installation"
     fi
 
     _remove_pyngus
@@ -405,6 +369,7 @@ function _iniset_amqp1_backend {
     local package=$1
     local file=$2
     local section=${3:-DEFAULT}
+    local port=5672
 
     iniset $file $section rpc_backend "amqp"
     iniset $file $section qpid_hostname ${AMQP1_HOST}
@@ -412,13 +377,20 @@ function _iniset_amqp1_backend {
         iniset $file oslo_messaging_amqp username $AMQP1_USERNAME
         iniset $file oslo_messaging_amqp password $AMQP1_PASSWORD
     fi
+
+    if [ "$AMQP1_SERVICE" == "qpid-dual" ]; then
+        iniset $file $section transport_url $(get_transport_url "5671")
+        iniset $file oslo_messaging_notifications transport_url $(get_transport_url "5672")
+    else
+        iniset $file $section transport_url $(get_transport_url "5672")
+    fi
 }
 
 
 if is_service_enabled amqp1; then
     # @TODO (ansmith) check is for qdr or qpid for now
-    if [[ "$AMQP1_SERVICE" != "qdr" && "$AMQP1_SERVICE" != "qpid" ]]; then
-        die $LINENO "AMQP 1.0 requires qpid or qdr - $AMQP1_SERVICE not supported"
+    if [[ "$AMQP1_SERVICE" != "qpid" && "$AMQP1_SERVICE" != "qpid-dual" ]]; then
+        die $LINENO "AMQP 1.0 requires qpid or qpid-dual - $AMQP1_SERVICE not supported"
     fi
 
     # Note: this is the only tricky part about out of tree rpc plugins,
@@ -444,12 +416,12 @@ if is_service_enabled amqp1; then
     elif [[ "$1" == "stack" && "$2" == "install" ]]; then
         # Installs and configures the messaging service
         echo_summary "Installing AMQP service $AMQP1_SERVICE"
-        _install_${AMQP1_SERVICE}_backend
+        _install_amqp1_backend
 
     elif [[ "$1" == "stack" && "$2" == "post-config" ]]; then
         # Start the messaging service process, this happens before any
         # services start
-        _start_${AMQP1_SERVICE}_backend
+        _start_amqp1_backend
 
     elif [[ "$1" == "stack" && "$2" == "extra" ]]; then
         :
@@ -462,7 +434,7 @@ if is_service_enabled amqp1; then
     if [[ "$1" == "clean" ]]; then
         # Remove state and transient data
         # Remember clean.sh first calls unstack.sh
-        _cleanup_${AMQP1_SERVICE}_backend
+        _cleanup_amqp1_backend
     fi
 fi
 
