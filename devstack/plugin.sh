@@ -33,7 +33,7 @@
 
 # builds transport url string
 function _get_amqp1_transport_url {
-    local port=$1
+    local port=${1:-5672}
     echo "amqp://$AMQP1_USERNAME:$AMQP1_PASSWORD@$AMQP1_HOST:$port/"
 }
 
