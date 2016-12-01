@@ -21,6 +21,11 @@ Devstack plugin for AMQP 1.0 olso.messaging driver - This plugin supports the QP
 
      AMQP1_SERVICE=qpid-dual
    
+5. Optionally set the network ports used to connect to the messaging service. If dual backends are to be configured, a separate Notify port must be used::
+
+     AMQP1_DEFAULT_PORT=5672
+     AMQP1_NOTIFY_PORT=5671
+
 5. run ``stack.sh``
 
     

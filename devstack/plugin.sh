@@ -26,15 +26,29 @@
 # AMQP1_SERVICE - identifies the messaging backend to use.  Should be
 #    one of 'qpid' for broker backend or 'qpid-dual' for hybrid router-broker.
 #    @TODO(kgiusti) add qpid-dispatch, rabbitmq, etc
-# AMQP1_HOST - the host:port used to connect to the messaging service.
-#    Defaults to 127.0.0.1:5672
+# AMQP1_HOST - the host used to connect to the messaging service.
+#    Defaults to 127.0.0.1
+# AMQP1_{DEFAULT_PORT, NOTIFY_PORT} - the port used to connect to the messaging
+#    service. Defaults to 5672 and 5671.
 # AMQP1_{USERNAME,PASSWORD} - for authentication with AMQP1_HOST
 #
 
-# builds transport url string
-function _get_amqp1_transport_url {
-    local port=${1:-5672}
-    echo "amqp://$AMQP1_USERNAME:$AMQP1_PASSWORD@$AMQP1_HOST:$port/"
+# builds default transport url string
+function _get_amqp1_default_transport_url {
+    if [ -z "$AMQP1_USERNAME" ]; then
+        echo "amqp://$AMQP1_HOST:${AMQP1_DEFAULT_PORT}/"
+    else
+        echo "amqp://$AMQP1_USERNAME:$AMQP1_PASSWORD@$AMQP1_HOST:${AMQP1_DEFAULT_PORT}/"
+    fi
+}
+
+# builds notify transport url string
+function _get_amqp1_notify_transport_url {
+    if [ -z "$AMQP1_USERNAME" ]; then
+        echo "amqp://$AMQP1_HOST:${AMQP1_NOTIFY_PORT}/"
+    else
+        echo "amqp://$AMQP1_USERNAME:$AMQP1_PASSWORD@$AMQP1_HOST:${AMQP1_NOTIFY_PORT}/"
+    fi
 }
 
 # install packages necessary for support of the oslo.messaging AMQP
@@ -88,6 +102,11 @@ function _configure_qpid {
     fi
     echo "acl-file=$qpid_acl_file" | sudo tee $qpid_conf_file
 
+    # map broker port for dual backend config
+    if [ "$AMQP1_SERVICE" == "qpid-dual" ]; then
+        echo "port=${AMQP1_NOTIFY_PORT}" | sudo tee --append $qpid_conf_file
+    fi
+
     if [ -z "$AMQP1_USERNAME" ]; then
         # no QPID user configured, so disable authentication
         # and access control
@@ -117,6 +136,7 @@ sasldb_path: /var/lib/qpidd/qpidd.sasldb
 mech_list: PLAIN
 sql_select: dummy select
 EOF
+
         local sasl_db
         sasl_db=`sudo grep sasldb_path $sasl_conf_file | cut -f 2 -d ":" | tr -d [:blank:]`
         if [ ! -e $sasl_db ]; then
@@ -185,11 +205,10 @@ router {
 EOF
 
     # Create a listener for incoming connect to the router
-    # assign router to amqps port
     cat <<EOF | sudo tee --append $qdr_conf_file
 listener {
     addr: 0.0.0.0
-    port: amqps
+    port: ${AMQP1_DEFAULT_PORT}
     role: normal
 EOF
     if [ -z "$AMQP1_USERNAME" ]; then
@@ -369,20 +388,12 @@ function _iniset_amqp1_backend {
     local package=$1
     local file=$2
     local section=${3:-DEFAULT}
-    local port=5672
-
-    iniset $file $section rpc_backend "amqp"
-    iniset $file $section qpid_hostname ${AMQP1_HOST}
-    if [ -n "$AMQP1_USERNAME" ]; then
-        iniset $file oslo_messaging_amqp username $AMQP1_USERNAME
-        iniset $file oslo_messaging_amqp password $AMQP1_PASSWORD
-    fi
 
     if [ "$AMQP1_SERVICE" == "qpid-dual" ]; then
-        iniset $file $section transport_url $(get_transport_url "5671")
-        iniset $file oslo_messaging_notifications transport_url $(get_transport_url "5672")
+        iniset $file $section transport_url $(get_transport_url)
+        iniset $file oslo_messaging_notifications transport_url $(_get_amqp1_notify_transport_url)
     else
-        iniset $file $section transport_url $(get_transport_url "5672")
+        iniset $file $section transport_url $(get_transport_url)
     fi
 }
 
@@ -400,7 +411,7 @@ if is_service_enabled amqp1; then
         _iniset_amqp1_backend $@
     }
     function get_transport_url {
-        _get_amqp1_transport_url $@
+        _get_amqp1_default_transport_url $@
     }
     export -f iniset_rpc_backend
     export -f get_transport_url
@@ -409,6 +420,10 @@ fi
 
 # check for amqp1 service
 if is_service_enabled amqp1; then
+
+    AMQP1_DEFAULT_PORT=${AMQP1_DEFAULT_PORT:=5672}
+    AMQP1_NOTIFY_PORT=${AMQP1_NOTIFY_PORT:=5671}
+
     if [[ "$1" == "stack" && "$2" == "pre-install" ]]; then
         # nothing needed here
         :
