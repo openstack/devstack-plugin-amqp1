@@ -421,9 +421,11 @@ if is_service_enabled amqp1; then
     fi
 
     # Save rabbit get_transport_url for notifications if necessary
-    get_transport_url_definition=$(declare -f get_transport_url)
-    eval "_get_rabbit_transport_url() ${get_transport_url_definition#*\()}"
-    export -f _get_rabbit_transport_url
+    if [ ! $(type -t _get_rabbit_transport_url) ]; then
+        get_transport_url_definition=$(declare -f get_transport_url)
+        eval "_get_rabbit_transport_url() ${get_transport_url_definition#*\()}"
+        export -f _get_rabbit_transport_url
+    fi
 
     # Note: this is the only tricky part about out of tree rpc plugins,
     # you must overwrite the iniset_rpc_backend function so that when
