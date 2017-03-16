@@ -162,6 +162,7 @@ topic-patterns=broadcast
 log-enable=info+
 log-to-file=$log_file
 log-to-syslog=yes
+max-connections=0
 EOF
 
     # Set the SASL service name if the version of qpidd supports it
