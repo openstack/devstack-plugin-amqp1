@@ -332,7 +332,7 @@ function _install_amqp1_backend {
     elif is_ubuntu; then
         install_package sasl2-bin
         # newer qpidd and proton only available via the qpid PPA
-        sudo add-apt-repository -y ppa:qpid/testing
+        sudo add-apt-repository -y ppa:qpid/released
         #sudo apt-get update
         REPOS_UPDATED=False
         update_package_repo
