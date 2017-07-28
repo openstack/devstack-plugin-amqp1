@@ -32,9 +32,10 @@
 #     'external' - use a pre-provisioned message bus.  This prevents
 #       this plugin from creating the message bus.  Instead it assumes
 #       the bus has already been set up and simply connects to it.
-# AMQP1_RPC_TRANSPORT_URL - Transport URL to use for RPC service
+# AMQP1_RPC_TRANSPORT_URL - Transport URL to use for RPC service.
+#    A virtual host may be added at run time.
 # AMQP1_NOTIFY_TRANSPORT_URL - Transport URL to use for Notification
-#    service.
+#    service. A virtual host may be added at run time.
 #
 # If the above AMQP1_*_TRANSPORT_URL env vars are not defined, this
 # plugin will construct these urls using the following env vars:
@@ -88,12 +89,33 @@ function _parse_transport_url {
 
 # default transport url string
 function _get_amqp1_default_transport_url {
-    echo "$AMQP1_RPC_TRANSPORT_URL"
+    local virtual_host
+    virtual_host=$1
+    echo "$AMQP1_RPC_TRANSPORT_URL/$virtual_host"
 }
 
 # notify transport url string
 function _get_amqp1_notify_transport_url {
-    echo "$AMQP1_NOTIFY_TRANSPORT_URL"
+    local virtual_host
+    virtual_host=$1
+
+    if [ "$AMQP1_NOTIFY" == "rabbit" ]; then
+        echo $(_get_rabbit_notification_url $virtual_host)
+    else
+        echo "$AMQP1_NOTIFY_TRANSPORT_URL/$virtual_host"
+    fi
+}
+
+# override the default in devstack as it forces all non-rabbit
+# backends to fail...
+function _amqp1_add_vhost {
+
+    if [ "$AMQP1_NOTIFY" == "rabbit" ]; then
+        _rabbit_rpc_backend_add_vhost $@
+    fi
+
+    # no configuration necessary for AMQP 1.0 backend
+    return 0
 }
 
 # install packages necessary for support of the oslo.messaging AMQP
@@ -451,17 +473,15 @@ function _iniset_amqp1_backend {
     local package
     local file
     local section
+    local virtual_host
 
     package=$1
     file=$2
     section=${3:-DEFAULT}
+    virtual_host=$4
 
-    iniset $file $section transport_url $(get_transport_url)
-    if [ "$AMQP1_NOTIFY" == "rabbit" ]; then
-        iniset $file oslo_messaging_notifications transport_url $(_get_rabbit_transport_url)
-    else
-        iniset $file oslo_messaging_notifications transport_url $(_get_amqp1_notify_transport_url)
-    fi
+    iniset $file $section transport_url $(get_transport_url "$virtual_host")
+    iniset $file oslo_messaging_notifications transport_url $(get_notification_url "$virtual_host")
 }
 
 
@@ -512,24 +532,47 @@ if is_service_enabled amqp1; then
             ;;
     esac
 
-    # Save rabbit get_transport_url for notifications if necessary
-    if [ ! $(type -t _get_rabbit_transport_url) ]; then
-        get_transport_url_definition=$(declare -f get_transport_url)
-        eval "_get_rabbit_transport_url() ${get_transport_url_definition#*\()}"
-        export -f _get_rabbit_transport_url
+    #
+    # Override all rpc_backend functions that are rabbit-specific:
+    #
+
+    # this plugin can be configured to use rabbit for notifications
+    # (qpid-hybrid), so save a copy of the original
+    if [ ! $(type -t _get_rabbit_notification_url) ]; then
+        get_notification_url_definition=$(declare -f get_notification_url)
+        eval "_get_rabbit_notification_url() ${get_notification_url_definition#*\()}"
+        export -f _get_rabbit_notification_url
     fi
 
-    # Note: this is the only tricky part about out of tree rpc plugins,
-    # you must overwrite the iniset_rpc_backend function so that when
-    # that's passed around the correct settings files are made.
+    # rpc_backend's version of rpc_backend_add_vhost assumes vhosting
+    # is a rabbit-only feature!  Will need original if using rabbit
+    # for notifications
+    if [ ! $(type -t _rabbit_rpc_backend_add_vhost) ]; then
+        rpc_backend_add_vhost_definition=$(declare -f rpc_backend_add_vhost)
+        eval "_rabbit_rpc_backend_add_vhost() ${rpc_backend_add_vhost_definition#*\()}"
+        export -f _rabbit_rpc_backend_add_vhost
+    fi
+
+    # export the overridden functions
     function iniset_rpc_backend {
         _iniset_amqp1_backend $@
     }
+    export -f iniset_rpc_backend
+
     function get_transport_url {
         _get_amqp1_default_transport_url $@
     }
-    export -f iniset_rpc_backend
     export -f get_transport_url
+
+    function get_notification_url {
+        _get_amqp1_notify_transport_url $@
+    }
+    export -f get_notification_url
+
+    function rpc_backend_add_vhost {
+        _amqp1_add_vhost $@
+    }
+    export -f rpc_backend_add_vhost
 
     if [[ "$1" == "stack" && "$2" == "pre-install" ]]; then
         # nothing needed here
