@@ -13,7 +13,6 @@
       - openstack/tempest
 
 - project:
-    name: openstack/devstack-plugin-amqp1
     check:
       jobs:
         - devstack-plugin-amqp1-tempest-dsvm-full:
