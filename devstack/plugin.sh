@@ -254,6 +254,8 @@ function _configure_qdr {
     local url
     url=$(_parse_transport_url $1)
 
+    QDR=$(type -p qdrouterd)
+
     # the location of the configuration is /etc/qpid-dispatch
     local qdr_conf_file
     if [ -e /etc/qpid-dispatch/qdrouterd.conf ]; then
@@ -275,7 +277,6 @@ router {
     workerThreads: 4
     saslConfigPath: /etc/sasl2
     saslConfigName: qdrouterd
-    debugDump: /opt/stack/amqp1
 }
 
 EOF
@@ -283,9 +284,14 @@ EOF
     # Create a listener for incoming connect to the router
     local port
     port=$(echo "$url" | cut -d' ' -f2)
+
+    # ip address field name changed to 'host' at 1.0+
+    local field_name
+    field_name=$([[ $($QDR -v) == 0.*.* ]] && echo addr || echo host)
+
     cat <<EOF | sudo tee --append $qdr_conf_file
 listener {
-    addr: 0.0.0.0
+    ${field_name}: 0.0.0.0
     port: ${port}
     role: normal
 EOF
@@ -387,7 +393,7 @@ EOF
     cat <<EOF | sudo tee --append $qdr_conf_file
 log {
     module: DEFAULT
-    enable: info+
+    enable: trace+
     output: $log_file
 }
 
