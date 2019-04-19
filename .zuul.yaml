@@ -8,7 +8,7 @@
     post-run: playbooks/devstack-plugin-amqp1-tempest-dsvm-full/post.yaml
     timeout: 10800
     required-projects:
-      - openstack-infra/devstack-gate
+      - openstack/devstack-gate
       - openstack/devstack-plugin-amqp1
       - openstack/tempest
 
