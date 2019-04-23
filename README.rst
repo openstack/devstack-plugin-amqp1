@@ -19,7 +19,7 @@ Devstack plugin for AMQP 1.0 olso.messaging driver - This plugin supports the QP
 
      cat > local.conf
      [[local|localrc]]
-     enable_plugin amqp1 https://git.openstack.org/openstack/devstack-plugin-amqp1
+     enable_plugin amqp1 https://opendev.org/openstack/devstack-plugin-amqp1
 
 3. Set username and password variables if needed and they will be added to configuration::
 
