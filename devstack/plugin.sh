@@ -130,7 +130,7 @@ function _install_pyngus {
         install_package python-qpid-proton
     elif is_ubuntu; then
         # ditto
-        install_package python-qpid-proton
+        install_package python3-qpid-proton
     fi
     pip_install_gr pyngus
 }
