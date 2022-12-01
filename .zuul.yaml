@@ -20,9 +20,6 @@
         - oslo.messaging-src-dsvm-full-amqp1-hybrid:
             voting: false
             branches: ^(?!stable/ocata).*$
-        - oslo.messaging-src-dsvm-full-amqp1-dual-centos-7:
-            voting: false
-            branches: ^(?!stable/ocata).*$
         - openstack-tox-bashate
     gate:
       jobs:
